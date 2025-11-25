@@ -14,9 +14,11 @@ Para ejecutar la aplicación:
 streamlit run frontend/app.py
 ```
 
-O desde la raíz del proyecto:
+Si necesitas apuntar el frontend a un backend local diferente (por defecto usa el dominio desplegado en Railway), define la variable `API_BASE_URL` antes de ejecutar:
 
 ```bash
+set API_BASE_URL=http://localhost:8000   # Windows
+export API_BASE_URL=http://localhost:8000  # macOS / Linux
 streamlit run frontend/app.py
 ```
 

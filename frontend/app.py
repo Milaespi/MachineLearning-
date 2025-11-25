@@ -3,17 +3,12 @@ Aplicación web frontend con Streamlit.
 Interfaz de usuario moderna y atractiva para probar los modelos de Machine Learning.
 """
 
+import os
+
+import requests
 import streamlit as st
 import streamlit.components.v1 as components
 import plotly.graph_objects as go
-from backend.predictors import (
-    predict_logistic_regression,
-    predict_knn,
-    predict_kmeans,
-    prepare_telco_input,
-    prepare_credit_card_input
-)
-from backend.model_loader import model_exists
 
 # ============================================
 # CONFIGURACIÓN DE LA PÁGINA
@@ -375,6 +370,21 @@ st.markdown("""
 })();
 </script>
 """, unsafe_allow_html=True)
+
+API_BASE_URL = os.getenv("API_BASE_URL", "https://machinelearning-production-074b.up.railway.app")
+
+
+def call_backend(endpoint: str, payload: dict):
+    """Helper para invocar el backend vía HTTP."""
+    url = f"{API_BASE_URL}{endpoint}"
+    try:
+        response = requests.post(url, json=payload, timeout=30)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as exc:
+        st.error(f"❌ Error al comunicarse con el backend: {exc}")
+        return None
+
 
 # ============================================
 # CSS PERSONALIZADO
@@ -780,236 +790,233 @@ if model_choice in ["Regresión Logística", "K-Nearest Neighbors (KNN)"]:
     </div>
     """, unsafe_allow_html=True)
     
-    # Verificar que los modelos existan
-    if model_choice == "Regresión Logística":
-        model_file = "logreg_model.pkl"
-    else:
-        model_file = "knn_model.pkl"
+    st.info("Las predicciones se procesan en un backend remoto desplegado en Railway. Puede tomar unos segundos.")
     
-    if not model_exists(model_file):
-        st.error(f"⚠️ No se encontró el archivo del modelo {model_choice}.")
-        st.info("Por favor, asegúrate de que el archivo esté en la carpeta 'modelos/':")
-        st.code(f"- {model_file}")
-    else:
-        st.success("✅ Modelo cargado correctamente")
+    # Formulario de entrada con mejor diseño
+    st.markdown("""
+    <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 10px; margin: 1rem 0;">
+        <h3 style="margin-top: 0; color: #2c3e50;">📝 Datos del Cliente</h3>
+        <p style="color: #6c757d; margin-bottom: 0;">Completa todos los campos para obtener la predicción</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Organizar formulario en tabs o secciones
+    tab1, tab2, tab3 = st.tabs(["👤 Información Personal", "📱 Servicios", "💳 Facturación"])
+    
+    with tab1:
+        col1, col2 = st.columns(2)
+        with col1:
+            gender = st.selectbox("Género", ["Masculino", "Femenino"], key="gender")
+            senior_citizen = st.selectbox("Adulto Mayor", ["No", "Sí"], key="senior")
+            partner = st.selectbox("Pareja", ["No", "Sí"], key="partner")
+            dependents = st.selectbox("Dependientes", ["No", "Sí"], key="dependents")
+        with col2:
+            tenure = st.number_input("Tiempo (meses)", min_value=0, max_value=100, value=12, key="tenure")
+            st.caption("Tiempo que el cliente ha estado con la compañía")
+    
+    with tab2:
+        col1, col2 = st.columns(2)
+        with col1:
+            phone_service = st.selectbox("Servicio Telefónico", ["No", "Sí"], key="phone")
+            multiple_lines = st.selectbox("Múltiples Líneas", ["No", "Sí", "Sin servicio telefónico"], key="multiple")
+            internet_service = st.selectbox("Servicio de Internet", ["DSL", "Fibra óptica", "No"], key="internet")
+            online_security = st.selectbox("Seguridad en Línea", ["No", "Sí", "Sin servicio de internet"], key="security")
+        with col2:
+            online_backup = st.selectbox("Respaldo en Línea", ["No", "Sí", "Sin servicio de internet"], key="backup")
+            device_protection = st.selectbox("Protección de Dispositivos", ["No", "Sí", "Sin servicio de internet"], key="device")
+            tech_support = st.selectbox("Soporte Técnico", ["No", "Sí", "Sin servicio de internet"], key="tech")
+            streaming_tv = st.selectbox("TV por Streaming", ["No", "Sí", "Sin servicio de internet"], key="tv")
         
-        # Formulario de entrada con mejor diseño
-        st.markdown("""
-        <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 10px; margin: 1rem 0;">
-            <h3 style="margin-top: 0; color: #2c3e50;">📝 Datos del Cliente</h3>
-            <p style="color: #6c757d; margin-bottom: 0;">Completa todos los campos para obtener la predicción</p>
-        </div>
-        """, unsafe_allow_html=True)
+        col3, col4 = st.columns(2)
+        with col3:
+            streaming_movies = st.selectbox("Películas por Streaming", ["No", "Sí", "Sin servicio de internet"], key="movies")
+    
+    with tab3:
+        col1, col2 = st.columns(2)
+        with col1:
+            contract = st.selectbox("Contrato", ["Mensual", "Un año", "Dos años"], key="contract")
+            paperless_billing = st.selectbox("Facturación Sin Papel", ["No", "Sí"], key="paperless")
+            payment_method = st.selectbox("Método de Pago", [
+                "Cheque electrónico", "Cheque por correo", "Transferencia bancaria (automática)", "Tarjeta de crédito (automática)"
+            ], key="payment")
+        with col2:
+            monthly_charges = st.number_input("Cargos Mensuales ($)", min_value=0.0, max_value=200.0, value=50.0, step=0.1, key="monthly")
+            total_charges = st.number_input("Cargos Totales ($)", min_value=0.0, max_value=10000.0, value=500.0, step=0.1, key="total")
+            st.caption("Cargos totales acumulados")
+    
+    # Botón de predicción
+    st.markdown("<br>", unsafe_allow_html=True)
+    col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
+    with col_btn2:
+        predict_button = st.button("🔮 Realizar Predicción", type="primary", use_container_width=True)
+    
+    if predict_button:
+        payload = {
+            "gender": gender,
+            "senior_citizen": senior_citizen,
+            "partner": partner,
+            "dependents": dependents,
+            "tenure": tenure,
+            "phone_service": phone_service,
+            "multiple_lines": multiple_lines,
+            "internet_service": internet_service,
+            "online_security": online_security,
+            "online_backup": online_backup,
+            "device_protection": device_protection,
+            "tech_support": tech_support,
+            "streaming_tv": streaming_tv,
+            "streaming_movies": streaming_movies,
+            "contract": contract,
+            "paperless_billing": paperless_billing,
+            "payment_method": payment_method,
+            "monthly_charges": monthly_charges,
+            "total_charges": total_charges,
+        }
         
-        # Organizar formulario en tabs o secciones
-        tab1, tab2, tab3 = st.tabs(["👤 Información Personal", "📱 Servicios", "💳 Facturación"])
+        endpoint = "/predict/logistic" if model_choice == "Regresión Logística" else "/predict/knn"
         
-        with tab1:
-            col1, col2 = st.columns(2)
-            with col1:
-                gender = st.selectbox("Género", ["Masculino", "Femenino"], key="gender")
-                senior_citizen = st.selectbox("Adulto Mayor", ["No", "Sí"], key="senior")
-                partner = st.selectbox("Pareja", ["No", "Sí"], key="partner")
-                dependents = st.selectbox("Dependientes", ["No", "Sí"], key="dependents")
-            with col2:
-                tenure = st.number_input("Tiempo (meses)", min_value=0, max_value=100, value=12, key="tenure")
-                st.caption("Tiempo que el cliente ha estado con la compañía")
+        with st.spinner("Enviando datos al backend..."):
+            result = call_backend(endpoint, payload)
         
-        with tab2:
-            col1, col2 = st.columns(2)
-            with col1:
-                phone_service = st.selectbox("Servicio Telefónico", ["No", "Sí"], key="phone")
-                multiple_lines = st.selectbox("Múltiples Líneas", ["No", "Sí", "Sin servicio telefónico"], key="multiple")
-                internet_service = st.selectbox("Servicio de Internet", ["DSL", "Fibra óptica", "No"], key="internet")
-                online_security = st.selectbox("Seguridad en Línea", ["No", "Sí", "Sin servicio de internet"], key="security")
-            with col2:
-                online_backup = st.selectbox("Respaldo en Línea", ["No", "Sí", "Sin servicio de internet"], key="backup")
-                device_protection = st.selectbox("Protección de Dispositivos", ["No", "Sí", "Sin servicio de internet"], key="device")
-                tech_support = st.selectbox("Soporte Técnico", ["No", "Sí", "Sin servicio de internet"], key="tech")
-                streaming_tv = st.selectbox("TV por Streaming", ["No", "Sí", "Sin servicio de internet"], key="tv")
+        if not result:
+            st.stop()
+        
+        if model_choice == "Regresión Logística":
+            # Mostrar resultados con diseño mejorado
+            st.markdown("---")
+            st.markdown("""
+            <div style="text-align: center; margin: 2rem 0;">
+                <h2 style="color: #2c3e50;">📊 Resultados de la Predicción</h2>
+            </div>
+            """, unsafe_allow_html=True)
             
-            col3, col4 = st.columns(2)
-            with col3:
-                streaming_movies = st.selectbox("Películas por Streaming", ["No", "Sí", "Sin servicio de internet"], key="movies")
+            # Métricas principales
+            col_res1, col_res2, col_res3 = st.columns(3)
+            
+            with col_res1:
+                st.markdown(f"""
+                <div class="metric-card" style="text-align: center;">
+                    <h3 style="margin: 0; color: #667eea; font-size: 1.5rem;">Clasificación</h3>
+                    <h2 style="margin: 0.5rem 0; color: {'#e74c3c' if result['prediction'] == 1 else '#27ae60'};">
+                        {result['classification']}
+                    </h2>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col_res2:
+                prob_churn = result['probability_churn'] * 100
+                st.markdown(f"""
+                <div class="metric-card" style="text-align: center;">
+                    <h3 style="margin: 0; color: #667eea; font-size: 1.5rem;">Probabilidad de Abandono</h3>
+                    <h2 style="margin: 0.5rem 0; color: #e74c3c;">{prob_churn:.2f}%</h2>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col_res3:
+                prob_no_churn = result['probability_no_churn'] * 100
+                st.markdown(f"""
+                <div class="metric-card" style="text-align: center;">
+                    <h3 style="margin: 0; color: #667eea; font-size: 1.5rem;">Probabilidad de No Abandono</h3>
+                    <h2 style="margin: 0.5rem 0; color: #27ae60;">{prob_no_churn:.2f}%</h2>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # Gráfico de barras de probabilidades
+            fig = go.Figure()
+            fig.add_trace(go.Bar(
+                x=['Abandono', 'Sin Abandono'],
+                y=[prob_churn, prob_no_churn],
+                marker_color=['#e74c3c', '#27ae60'],
+                text=[f'{prob_churn:.2f}%', f'{prob_no_churn:.2f}%'],
+                textposition='auto',
+            ))
+            fig.update_layout(
+                title="Distribución de Probabilidades",
+                yaxis_title="Probabilidad (%)",
+                height=400,
+                showlegend=False,
+                template="plotly_white"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Barra de progreso visual
+            st.markdown("### Probabilidad de Abandono")
+            st.progress(result['probability_churn'])
+            
+            # Interpretación
+            if result['prediction'] == 1:
+                st.markdown("""
+                <div class="warning-box">
+                    <h4 style="margin: 0;">⚠️ Alerta: Cliente en Riesgo</h4>
+                    <p style="margin: 0.5rem 0 0 0;">
+                        El cliente tiene alta probabilidad de abandonar el servicio (Abandono).
+                        Se recomienda tomar acciones preventivas.
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                <div class="success-box">
+                    <h4 style="margin: 0;">✅ Cliente Estable</h4>
+                    <p style="margin: 0.5rem 0 0 0;">
+                        El cliente tiene baja probabilidad de abandonar el servicio.
+                        Cliente con buen perfil de retención.
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
         
-        with tab3:
-            col1, col2 = st.columns(2)
-            with col1:
-                contract = st.selectbox("Contrato", ["Mensual", "Un año", "Dos años"], key="contract")
-                paperless_billing = st.selectbox("Facturación Sin Papel", ["No", "Sí"], key="paperless")
-                payment_method = st.selectbox("Método de Pago", [
-                    "Cheque electrónico", "Cheque por correo", "Transferencia bancaria (automática)", "Tarjeta de crédito (automática)"
-                ], key="payment")
-            with col2:
-                monthly_charges = st.number_input("Cargos Mensuales ($)", min_value=0.0, max_value=200.0, value=50.0, step=0.1, key="monthly")
-                total_charges = st.number_input("Cargos Totales ($)", min_value=0.0, max_value=10000.0, value=500.0, step=0.1, key="total")
-                st.caption("Cargos totales acumulados")
-        
-        # Botón de predicción
-        st.markdown("<br>", unsafe_allow_html=True)
-        col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
-        with col_btn2:
-            predict_button = st.button("🔮 Realizar Predicción", type="primary", use_container_width=True)
-        
-        if predict_button:
-            try:
-                # Preparar datos de entrada
-                input_data = prepare_telco_input(
-                    gender, senior_citizen, partner, dependents, tenure,
-                    phone_service, multiple_lines, internet_service,
-                    online_security, online_backup, device_protection,
-                    tech_support, streaming_tv, streaming_movies, contract,
-                    paperless_billing, payment_method, monthly_charges,
-                    total_charges
-                )
-                
-                # Realizar predicción según el modelo seleccionado
-                if model_choice == "Regresión Logística":
-                    result = predict_logistic_regression(input_data)
-                    
-                    # Mostrar resultados con diseño mejorado
-                    st.markdown("---")
-                    st.markdown("""
-                    <div style="text-align: center; margin: 2rem 0;">
-                        <h2 style="color: #2c3e50;">📊 Resultados de la Predicción</h2>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Métricas principales
-                    col_res1, col_res2, col_res3 = st.columns(3)
-                    
-                    with col_res1:
-                        st.markdown(f"""
-                        <div class="metric-card" style="text-align: center;">
-                            <h3 style="margin: 0; color: #667eea; font-size: 1.5rem;">Clasificación</h3>
-                            <h2 style="margin: 0.5rem 0; color: {'#e74c3c' if result['prediction'] == 1 else '#27ae60'};">
-                                {'Sí' if result['classification'] == 'Yes' else 'No'}
-                            </h2>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    
-                    with col_res2:
-                        prob_churn = result['probability_churn'] * 100
-                        st.markdown(f"""
-                        <div class="metric-card" style="text-align: center;">
-                            <h3 style="margin: 0; color: #667eea; font-size: 1.5rem;">Probabilidad de Abandono</h3>
-                            <h2 style="margin: 0.5rem 0; color: #e74c3c;">{prob_churn:.2f}%</h2>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    
-                    with col_res3:
-                        prob_no_churn = result['probability_no_churn'] * 100
-                        st.markdown(f"""
-                        <div class="metric-card" style="text-align: center;">
-                            <h3 style="margin: 0; color: #667eea; font-size: 1.5rem;">Probabilidad de No Abandono</h3>
-                            <h2 style="margin: 0.5rem 0; color: #27ae60;">{prob_no_churn:.2f}%</h2>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    
-                    # Gráfico de barras de probabilidades
-                    fig = go.Figure()
-                    fig.add_trace(go.Bar(
-                        x=['Abandono', 'Sin Abandono'],
-                        y=[prob_churn, prob_no_churn],
-                        marker_color=['#e74c3c', '#27ae60'],
-                        text=[f'{prob_churn:.2f}%', f'{prob_no_churn:.2f}%'],
-                        textposition='auto',
-                    ))
-                    fig.update_layout(
-                        title="Distribución de Probabilidades",
-                        yaxis_title="Probabilidad (%)",
-                        height=400,
-                        showlegend=False,
-                        template="plotly_white"
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                    # Barra de progreso visual
-                    st.markdown("### Probabilidad de Abandono")
-                    st.progress(result['probability_churn'])
-                    
-                    # Interpretación
-                    if result['prediction'] == 1:
-                        st.markdown("""
-                        <div class="warning-box">
-                            <h4 style="margin: 0;">⚠️ Alerta: Cliente en Riesgo</h4>
-                            <p style="margin: 0.5rem 0 0 0;">
-                                El cliente tiene alta probabilidad de abandonar el servicio (Abandono).
-                                Se recomienda tomar acciones preventivas.
-                            </p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    else:
-                        st.markdown("""
-                        <div class="success-box">
-                            <h4 style="margin: 0;">✅ Cliente Estable</h4>
-                            <p style="margin: 0.5rem 0 0 0;">
-                                El cliente tiene baja probabilidad de abandonar el servicio.
-                                Cliente con buen perfil de retención.
-                            </p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                
-                else:  # KNN
-                    result = predict_knn(input_data)
-                    
-                    # Mostrar resultados
-                    st.markdown("---")
-                    st.markdown("""
-                    <div style="text-align: center; margin: 2rem 0;">
-                        <h2 style="color: #2c3e50;">📊 Resultados de la Predicción (KNN)</h2>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    col_res1, col_res2 = st.columns([1, 1])
-                    
-                    with col_res1:
-                        st.markdown(f"""
-                        <div class="metric-card" style="text-align: center;">
-                            <h3 style="margin: 0; color: #764ba2; font-size: 1.5rem;">Clasificación KNN</h3>
-                            <h2 style="margin: 0.5rem 0; color: {'#e74c3c' if result['prediction'] == 1 else '#27ae60'}; font-size: 2.5rem;">
-                                {'Sí' if result['classification'] == 'Yes' else 'No'}
-                            </h2>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    
-                    with col_res2:
-                        st.markdown("""
-                        <div class="info-section">
-                            <h4 style="margin-top: 0;">ℹ️ Sobre KNN</h4>
-                            <p style="margin: 0;">
-                                K-Nearest Neighbors clasifica basándose en los clientes más similares
-                                en el dataset de entrenamiento.
-                            </p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    
-                    # Interpretación
-                    if result['prediction'] == 1:
-                        st.markdown("""
-                        <div class="warning-box">
-                            <h4 style="margin: 0;">⚠️ Predicción: Abandono</h4>
-                            <p style="margin: 0.5rem 0 0 0;">
-                                Según el algoritmo KNN, este cliente tiene probabilidad de Abandono
-                                basándose en clientes similares del dataset.
-                            </p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    else:
-                        st.markdown("""
-                        <div class="success-box">
-                            <h4 style="margin: 0;">✅ Predicción: No Abandono</h4>
-                            <p style="margin: 0.5rem 0 0 0;">
-                                Según el algoritmo KNN, este cliente NO tiene probabilidad de Abandono.
-                            </p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                
-            except FileNotFoundError as e:
-                st.error(f"❌ {str(e)}")
-            except Exception as e:
-                st.error(f"❌ Error al realizar la predicción: {str(e)}")
-                st.info("Verifica que el modelo sea compatible con los datos de entrada.")
+        else:  # KNN
+            # Mostrar resultados
+            st.markdown("---")
+            st.markdown("""
+            <div style="text-align: center; margin: 2rem 0;">
+                <h2 style="color: #2c3e50;">📊 Resultados de la Predicción (KNN)</h2>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            col_res1, col_res2 = st.columns([1, 1])
+            
+            with col_res1:
+                st.markdown(f"""
+                <div class="metric-card" style="text-align: center;">
+                    <h3 style="margin: 0; color: #764ba2; font-size: 1.5rem;">Clasificación KNN</h3>
+                    <h2 style="margin: 0.5rem 0; color: {'#e74c3c' if result['prediction'] == 1 else '#27ae60'}; font-size: 2.5rem;">
+                        {result['classification']}
+                    </h2>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col_res2:
+                st.markdown("""
+                <div class="info-section">
+                    <h4 style="margin-top: 0;">ℹ️ Sobre KNN</h4>
+                    <p style="margin: 0;">
+                        K-Nearest Neighbors clasifica basándose en los clientes más similares
+                        en el dataset de entrenamiento.
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # Interpretación
+            if result['prediction'] == 1:
+                st.markdown("""
+                <div class="warning-box">
+                    <h4 style="margin: 0;">⚠️ Predicción: Abandono</h4>
+                    <p style="margin: 0.5rem 0 0 0;">
+                        Según el algoritmo KNN, este cliente tiene probabilidad de Abandono
+                        basándose en clientes similares del dataset.
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                <div class="success-box">
+                    <h4 style="margin: 0;">✅ Predicción: No Abandono</h4>
+                    <p style="margin: 0.5rem 0 0 0;">
+                        Según el algoritmo KNN, este cliente NO tiene probabilidad de Abandono.
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
 
 # ============================================
 # MODELO NO SUPERVISADO (K-MEANS)
@@ -1025,145 +1032,145 @@ else:  # K-Means
     </div>
     """, unsafe_allow_html=True)
     
-    # Verificar que los modelos existan
-    if not model_exists("kmeans_model.pkl") or not model_exists("credit_scaler.pkl"):
-        st.error("⚠️ No se encontraron los archivos del modelo K-Means.")
-        st.info("Por favor, asegúrate de que los archivos estén en la carpeta 'modelos/':")
-        st.code("- kmeans_model.pkl\n- credit_scaler.pkl\n- cluster_profiles.pkl (opcional)")
-    else:
-        st.success("✅ Modelo cargado correctamente")
+    st.info("Las asignaciones de clusters se realizan en el backend desplegado en Railway.")
+    
+    # Formulario de entrada mejorado
+    st.markdown("""
+    <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 10px; margin: 1rem 0;">
+        <h3 style="margin-top: 0; color: #2c3e50;">💳 Datos de la Tarjeta de Crédito</h3>
+        <p style="color: #6c757d; margin-bottom: 0;">Ingresa los valores numéricos para asignar el cluster</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Organizar en tabs
+    tab1, tab2, tab3 = st.tabs(["💰 Balance y Compras", "📊 Frecuencias", "💵 Pagos y Límites"])
+    
+    with tab1:
+        col1, col2 = st.columns(2)
+        with col1:
+            balance = st.number_input("Saldo", min_value=0.0, value=0.0, step=0.01, key="balance")
+            balance_frequency = st.number_input("Frecuencia de Saldo", min_value=0.0, max_value=1.0, value=0.5, step=0.01, key="bal_freq")
+            purchases = st.number_input("Compras", min_value=0.0, value=0.0, step=0.01, key="purchases")
+            oneoff_purchases = st.number_input("Compras Únicas", min_value=0.0, value=0.0, step=0.01, key="oneoff")
+        with col2:
+            installments_purchases = st.number_input("Compras a Plazos", min_value=0.0, value=0.0, step=0.01, key="install")
+            cash_advance = st.number_input("Adelanto en Efectivo", min_value=0.0, value=0.0, step=0.01, key="cash")
+            st.caption("💡 Consejo: La frecuencia de saldo es un valor entre 0 y 1")
+    
+    with tab2:
+        col1, col2 = st.columns(2)
+        with col1:
+            purchases_frequency = st.number_input("Frecuencia de Compras", min_value=0.0, max_value=1.0, value=0.5, step=0.01, key="pur_freq")
+            oneoff_purchases_frequency = st.number_input("Frecuencia de Compras Únicas", min_value=0.0, max_value=1.0, value=0.0, step=0.01, key="oneoff_freq")
+            purchases_installments_frequency = st.number_input("Frecuencia de Compras a Plazos", min_value=0.0, max_value=1.0, value=0.0, step=0.01, key="inst_freq")
+        with col2:
+            cash_advance_frequency = st.number_input("Frecuencia de Adelantos", min_value=0.0, max_value=1.0, value=0.0, step=0.01, key="cash_freq")
+            cash_advance_trx = st.number_input("Transacciones de Adelanto", min_value=0, value=0, step=1, key="cash_trx")
+            purchases_trx = st.number_input("Transacciones de Compras", min_value=0, value=0, step=1, key="pur_trx")
+        st.caption("💡 Consejo: Las frecuencias son valores entre 0 y 1 (0 = nunca, 1 = siempre)")
+    
+    with tab3:
+        col1, col2 = st.columns(2)
+        with col1:
+            credit_limit = st.number_input("Límite de Crédito", min_value=0.0, value=1000.0, step=0.01, key="limit")
+            payments = st.number_input("Pagos", min_value=0.0, value=0.0, step=0.01, key="payments")
+            minimum_payments = st.number_input("Pagos Mínimos", min_value=0.0, value=0.0, step=0.01, key="min_pay")
+        with col2:
+            prc_full_payment = st.number_input("Porcentaje de Pago Completo", min_value=0.0, max_value=1.0, value=0.0, step=0.01, key="full_pay")
+            tenure = st.number_input("Tiempo (meses)", min_value=0, max_value=20, value=12, step=1, key="tenure_cc")
+        st.caption("💡 Consejo: El porcentaje de pago completo es un valor entre 0 y 1")
+    
+    # Botón de predicción
+    st.markdown("<br>", unsafe_allow_html=True)
+    col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
+    with col_btn2:
+        cluster_button = st.button("🔮 Asignar Cluster", type="primary", use_container_width=True)
+    
+    if cluster_button:
+        payload = {
+            "BALANCE": balance,
+            "BALANCE_FREQUENCY": balance_frequency,
+            "PURCHASES": purchases,
+            "ONEOFF_PURCHASES": oneoff_purchases,
+            "INSTALLMENTS_PURCHASES": installments_purchases,
+            "CASH_ADVANCE": cash_advance,
+            "PURCHASES_FREQUENCY": purchases_frequency,
+            "ONEOFF_PURCHASES_FREQUENCY": oneoff_purchases_frequency,
+            "PURCHASES_INSTALLMENTS_FREQUENCY": purchases_installments_frequency,
+            "CASH_ADVANCE_FREQUENCY": cash_advance_frequency,
+            "CASH_ADVANCE_TRX": cash_advance_trx,
+            "PURCHASES_TRX": purchases_trx,
+            "CREDIT_LIMIT": credit_limit,
+            "PAYMENTS": payments,
+            "MINIMUM_PAYMENTS": minimum_payments,
+            "PRC_FULL_PAYMENT": prc_full_payment,
+            "TENURE": tenure,
+        }
         
-        # Formulario de entrada mejorado
+        with st.spinner("Calculando cluster en el backend..."):
+            result = call_backend("/predict/kmeans", payload)
+        
+        if not result:
+            st.stop()
+        
+        # Mostrar resultados
+        st.markdown("---")
         st.markdown("""
-        <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 10px; margin: 1rem 0;">
-            <h3 style="margin-top: 0; color: #2c3e50;">💳 Datos de la Tarjeta de Crédito</h3>
-            <p style="color: #6c757d; margin-bottom: 0;">Ingresa los valores numéricos para asignar el cluster</p>
+        <div style="text-align: center; margin: 2rem 0;">
+            <h2 style="color: #2c3e50;">📊 Resultados del Clustering</h2>
         </div>
         """, unsafe_allow_html=True)
         
-        # Organizar en tabs
-        tab1, tab2, tab3 = st.tabs(["💰 Balance y Compras", "📊 Frecuencias", "💵 Pagos y Límites"])
+        # Métricas principales
+        col_res1, col_res2 = st.columns(2)
         
-        with tab1:
-            col1, col2 = st.columns(2)
-            with col1:
-                balance = st.number_input("Saldo", min_value=0.0, value=0.0, step=0.01, key="balance")
-                balance_frequency = st.number_input("Frecuencia de Saldo", min_value=0.0, max_value=1.0, value=0.5, step=0.01, key="bal_freq")
-                purchases = st.number_input("Compras", min_value=0.0, value=0.0, step=0.01, key="purchases")
-                oneoff_purchases = st.number_input("Compras Únicas", min_value=0.0, value=0.0, step=0.01, key="oneoff")
-            with col2:
-                installments_purchases = st.number_input("Compras a Plazos", min_value=0.0, value=0.0, step=0.01, key="install")
-                cash_advance = st.number_input("Adelanto en Efectivo", min_value=0.0, value=0.0, step=0.01, key="cash")
-                st.caption("💡 Consejo: La frecuencia de saldo es un valor entre 0 y 1")
+        with col_res1:
+            cluster_num = result['cluster']
+            colors = ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#4facfe', '#00f2fe']
+            color = colors[cluster_num % len(colors)]
+            st.markdown(f"""
+            <div class="metric-card" style="text-align: center; border-left-color: {color};">
+                <h3 style="margin: 0; color: {color}; font-size: 1.5rem;">Cluster Asignado</h3>
+                <h1 style="margin: 0.5rem 0; color: {color}; font-size: 4rem;">
+                    {cluster_num}
+                </h1>
+            </div>
+            """, unsafe_allow_html=True)
         
-        with tab2:
-            col1, col2 = st.columns(2)
-            with col1:
-                purchases_frequency = st.number_input("Frecuencia de Compras", min_value=0.0, max_value=1.0, value=0.5, step=0.01, key="pur_freq")
-                oneoff_purchases_frequency = st.number_input("Frecuencia de Compras Únicas", min_value=0.0, max_value=1.0, value=0.0, step=0.01, key="oneoff_freq")
-                purchases_installments_frequency = st.number_input("Frecuencia de Compras a Plazos", min_value=0.0, max_value=1.0, value=0.0, step=0.01, key="inst_freq")
-            with col2:
-                cash_advance_frequency = st.number_input("Frecuencia de Adelantos", min_value=0.0, max_value=1.0, value=0.0, step=0.01, key="cash_freq")
-                cash_advance_trx = st.number_input("Transacciones de Adelanto", min_value=0, value=0, step=1, key="cash_trx")
-                purchases_trx = st.number_input("Transacciones de Compras", min_value=0, value=0, step=1, key="pur_trx")
-            st.caption("💡 Consejo: Las frecuencias son valores entre 0 y 1 (0 = nunca, 1 = siempre)")
+        with col_res2:
+            st.markdown(f"""
+            <div class="metric-card" style="text-align: center;">
+                <h3 style="margin: 0; color: #667eea; font-size: 1.5rem;">Distancia al Centroide</h3>
+                <h2 style="margin: 0.5rem 0; color: #2c3e50;">{result['distance_to_centroid']:.4f}</h2>
+                <p style="margin: 0; color: #6c757d; font-size: 0.9rem;">
+                    Menor distancia = mayor similitud con el cluster
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
         
-        with tab3:
-            col1, col2 = st.columns(2)
-            with col1:
-                credit_limit = st.number_input("Límite de Crédito", min_value=0.0, value=1000.0, step=0.01, key="limit")
-                payments = st.number_input("Pagos", min_value=0.0, value=0.0, step=0.01, key="payments")
-                minimum_payments = st.number_input("Pagos Mínimos", min_value=0.0, value=0.0, step=0.01, key="min_pay")
-            with col2:
-                prc_full_payment = st.number_input("Porcentaje de Pago Completo", min_value=0.0, max_value=1.0, value=0.0, step=0.01, key="full_pay")
-                tenure = st.number_input("Tiempo (meses)", min_value=0, max_value=20, value=12, step=1, key="tenure_cc")
-            st.caption("💡 Consejo: El porcentaje de pago completo es un valor entre 0 y 1")
+        # Descripción del perfil del cluster
+        st.markdown("### 📋 Perfil del Cluster")
         
-        # Botón de predicción
-        st.markdown("<br>", unsafe_allow_html=True)
-        col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
-        with col_btn2:
-            cluster_button = st.button("🔮 Asignar Cluster", type="primary", use_container_width=True)
-        
-        if cluster_button:
-            try:
-                # Preparar datos de entrada
-                input_data = prepare_credit_card_input(
-                    balance, balance_frequency, purchases, oneoff_purchases,
-                    installments_purchases, cash_advance, purchases_frequency,
-                    oneoff_purchases_frequency, purchases_installments_frequency,
-                    cash_advance_frequency, cash_advance_trx, purchases_trx,
-                    credit_limit, payments, minimum_payments, prc_full_payment,
-                    tenure
-                )
-                
-                # Realizar predicción
-                result = predict_kmeans(input_data)
-                
-                # Mostrar resultados
-                st.markdown("---")
-                st.markdown("""
-                <div style="text-align: center; margin: 2rem 0;">
-                    <h2 style="color: #2c3e50;">📊 Resultados del Clustering</h2>
+        if result['profile']:
+            st.markdown(f"""
+            <div class="info-section">
+                <h4 style="margin-top: 0; color: {color}; font-size: 1.3rem;">
+                    Cluster {cluster_num} - Características
+                </h4>
+                <div style="color: #2c3e50; line-height: 1.8;">
+                    {result['profile']}
                 </div>
-                """, unsafe_allow_html=True)
-                
-                # Métricas principales
-                col_res1, col_res2 = st.columns(2)
-                
-                with col_res1:
-                    cluster_num = result['cluster']
-                    colors = ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#4facfe', '#00f2fe']
-                    color = colors[cluster_num % len(colors)]
-                    st.markdown(f"""
-                    <div class="metric-card" style="text-align: center; border-left-color: {color};">
-                        <h3 style="margin: 0; color: {color}; font-size: 1.5rem;">Cluster Asignado</h3>
-                        <h1 style="margin: 0.5rem 0; color: {color}; font-size: 4rem;">
-                            {cluster_num}
-                        </h1>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with col_res2:
-                    st.markdown(f"""
-                    <div class="metric-card" style="text-align: center;">
-                        <h3 style="margin: 0; color: #667eea; font-size: 1.5rem;">Distancia al Centroide</h3>
-                        <h2 style="margin: 0.5rem 0; color: #2c3e50;">{result['distance_to_centroid']:.4f}</h2>
-                        <p style="margin: 0; color: #6c757d; font-size: 0.9rem;">
-                            Menor distancia = mayor similitud con el cluster
-                        </p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                # Descripción del perfil del cluster
-                st.markdown("### 📋 Perfil del Cluster")
-                
-                if result['profile']:
-                    st.markdown(f"""
-                    <div class="info-section">
-                        <h4 style="margin-top: 0; color: {color}; font-size: 1.3rem;">
-                            Cluster {cluster_num} - Características
-                        </h4>
-                        <div style="color: #2c3e50; line-height: 1.8;">
-                            {result['profile']}
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.markdown(f"""
-                    <div class="info-section">
-                        <h4 style="margin-top: 0;">Cluster {cluster_num}</h4>
-                        <p style="margin: 0; color: #2c3e50;">
-                            Este cluster representa un grupo de clientes con características similares.
-                            Para obtener una descripción detallada del perfil, asegúrate de incluir
-                            el archivo 'cluster_profiles.pkl' con las descripciones precalculadas.
-                        </p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-            except FileNotFoundError as e:
-                st.error(f"❌ {str(e)}")
-            except Exception as e:
-                st.error(f"❌ Error al asignar el cluster: {str(e)}")
-                st.info("Verifica que el preprocesador y el modelo sean compatibles con los datos de entrada.")
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <div class="info-section">
+                <h4 style="margin-top: 0;">Cluster {cluster_num}</h4>
+                <p style="margin: 0; color: #2c3e50;">
+                    Este cluster representa un grupo de clientes con características similares.
+                    Para obtener una descripción detallada del perfil, asegúrate de incluir
+                    el archivo 'cluster_profiles.pkl' con las descripciones precalculadas.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
 

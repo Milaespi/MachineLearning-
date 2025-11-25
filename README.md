@@ -60,7 +60,8 @@ Parcial3/
 ├── backend/                    # Lógica del backend
 │   ├── __init__.py
 │   ├── model_loader.py         # Funciones para cargar modelos
-│   └── predictors.py           # Funciones de predicción
+│   ├── predictors.py           # Funciones de predicción
+│   └── api.py                  # FastAPI con los endpoints /predict
 │
 ├── frontend/                   # Interfaz de usuario
 │   └── app.py                  # Aplicación web principal (Streamlit)
@@ -81,7 +82,24 @@ Parcial3/
 
 ## 🎯 Uso de la Aplicación Web
 
-1. **Asegúrate de tener los modelos en la carpeta `modelos/`**
+### 1. Backend (ejecución local opcional)
+El frontend consume un backend HTTP desplegado en Railway (`https://machinelearning-production-074b.up.railway.app`).  
+Si deseas ejecutar el backend localmente:
+
+```bash
+uvicorn backend.api:app --reload --host 0.0.0.0 --port 8000
+```
+
+Luego, en otra terminal:
+
+```bash
+set API_BASE_URL=http://localhost:8000   # Windows PowerShell
+export API_BASE_URL=http://localhost:8000  # macOS / Linux
+```
+
+Si no defines `API_BASE_URL`, el frontend utilizará automáticamente el backend desplegado en Railway.
+
+### 2. Frontend (Streamlit)
 
 2. **Ejecutar la aplicación**
    
@@ -110,19 +128,35 @@ Parcial3/
 ### Regresión Logística
 - **Input**: Variables del dataset Telco Customer Churn
 - **Output**: 
-  - Probabilidad de churn (0-100%)
-  - Clasificación: Yes/No
+  - Probabilidad de abandono (0-100%)
+  - Clasificación: Sí/No
 
 ### K-Nearest Neighbors (KNN)
 - **Input**: Variables del dataset Telco Customer Churn
 - **Output**: 
-  - Clasificación: Yes/No
+  - Clasificación: Sí/No
 
 ### K-Means Clustering
 - **Input**: Variables numéricas del Credit Card Dataset
 - **Output**: 
   - Número del cluster asignado
   - Descripción del perfil del cluster
+
+## 🌐 Arquitectura y Endpoints
+
+El backend expone los modelos mediante FastAPI en el dominio:
+
+```
+https://machinelearning-production-074b.up.railway.app
+```
+
+Endpoints disponibles:
+
+- `POST /predict/logistic` → Predicción de Regresión Logística (probabilidades y clasificación)
+- `POST /predict/knn` → Predicción con KNN (clasificación)
+- `POST /predict/kmeans` → Asignación de cluster y perfil para K-Means
+
+Cada endpoint recibe un JSON con los campos del formulario y devuelve las métricas que consume el frontend de Streamlit.
 
 ## 📓 Notebooks de Análisis
 
@@ -156,11 +190,16 @@ El proyecto incluye notebooks completos en la carpeta `notebooks/`:
 - Los modelos `logreg_model.pkl` y `knn_model.pkl` ya incluyen el preprocesador dentro (son Pipelines)
 - Para K-Means, se requiere el archivo `credit_scaler.pkl` para preprocesar los datos
 - Se recomienda incluir `cluster_profiles.pkl` con las descripciones de cada cluster para K-Means
+- El frontend ya no importa módulos del backend: todas las predicciones se realizan a través de peticiones HTTP al API
 
 ## 🔧 Solución de Problemas
 
 ### Error: "streamlit no se reconoce como comando"
 - Usa `python -m streamlit run frontend/app.py` en lugar de solo `streamlit run frontend/app.py`
+
+### Error: "No se pudo conectar con el backend"
+- Verifica que `API_BASE_URL` apunte al dominio correcto o que el backend local esté ejecutándose
+- Comprueba tu conexión a internet si estás usando el backend en Railway
 
 ### Error: "No se encontraron los archivos del modelo"
 - Verifica que los archivos `.pkl` estén en la carpeta `modelos/`

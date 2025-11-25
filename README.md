@@ -83,7 +83,7 @@ Parcial3/
 ## 🎯 Uso de la Aplicación Web
 
 ### 1. Backend (ejecución local opcional)
-El frontend consume un backend HTTP desplegado en Railway (`https://machinelearning-production-074b.up.railway.app`).  
+El frontend consume un backend HTTP desplegado en Railway (`https://machinelearning-production-a471.up.railway.app`).  
 Si deseas ejecutar el backend localmente:
 
 ```bash

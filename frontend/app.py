@@ -10,6 +10,14 @@ import streamlit as st
 import streamlit.components.v1 as components
 import plotly.graph_objects as go
 
+from backend.predictors import (
+    predict_logistic_regression,
+    predict_knn,
+    predict_kmeans,
+    prepare_telco_input,
+    prepare_credit_card_input,
+)
+
 # ============================================
 # CONFIGURACIÓN DE LA PÁGINA
 # ============================================
@@ -74,6 +82,28 @@ st.markdown("""
     div[data-testid="stHeader"] div[data-baseweb="menu"] {
         display: none !important;
         visibility: hidden !important;
+    }
+    
+    /* Ocultar totalmente el menú de tres puntos y cualquier toolbar residual */
+    div[data-testid="stToolbar"],
+    div[data-testid="stToolbar"] *,
+    button[title="Main menu"],
+    button[title="View fullscreen"],
+    button[title="Settings"],
+    button[title="Rerun"],
+    button[data-testid="baseButton-header"],
+    button[data-testid="baseButton-toolbar"],
+    div[data-testid="stHeader"] button[title],
+    div[data-testid="stHeader"] [role="menu"],
+    div[data-testid="stHeader"] [data-baseweb="popover"],
+    div[data-testid="stHeader"] [data-baseweb="menu"],
+    .stAppHeader .stToolbar {
+        display: none !important;
+        visibility: hidden !important;
+        width: 0 !important;
+        height: 0 !important;
+        pointer-events: none !important;
+        opacity: 0 !important;
     }
     
     /* Asegurar que los menús de selectbox sean visibles */
@@ -374,16 +404,101 @@ st.markdown("""
 API_BASE_URL = os.getenv("API_BASE_URL", "https://machinelearning-production-074b.up.railway.app")
 
 
-def call_backend(endpoint: str, payload: dict):
-    """Helper para invocar el backend vía HTTP."""
-    url = f"{API_BASE_URL}{endpoint}"
-    try:
-        response = requests.post(url, json=payload, timeout=30)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as exc:
-        st.error(f"❌ Error al comunicarse con el backend: {exc}")
-        return None
+def call_backend(
+    endpoint: str,
+    payload: dict,
+    fallback=None,
+    fallback_label: str = "modo local",
+    show_warning: bool = False,
+):
+    """Helper para invocar el backend vía HTTP y usar un fallback local si falla."""
+    base_url = (API_BASE_URL.rstrip("/") if API_BASE_URL else None)
+    if base_url:
+        url = f"{base_url}{endpoint}"
+        try:
+            response = requests.post(url, json=payload, timeout=30)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as exc:
+            if fallback:
+                if show_warning:
+                    st.warning(
+                        f"⚠️ No se pudo usar el backend remoto ({exc}). "
+                        f"Intentando {fallback_label}…"
+                    )
+            else:
+                st.error(f"❌ Error al comunicarse con el backend: {exc}")
+                return None
+
+    if fallback:
+        try:
+            return fallback()
+        except FileNotFoundError as exc:
+            st.error(f"❌ {fallback_label.capitalize()}: {exc}")
+        except Exception as exc:  # pragma: no cover
+            st.error(f"❌ Error inesperado en {fallback_label}: {exc}")
+    else:
+        st.error("❌ No hay backend configurado ni fallback disponible para procesar la solicitud.")
+
+    return None
+
+
+def _format_telco_payload(form_data: dict):
+    """Convierte el payload del formulario en el formato requerido por los modelos Telco."""
+    return prepare_telco_input(
+        form_data["gender"],
+        form_data["senior_citizen"],
+        form_data["partner"],
+        form_data["dependents"],
+        form_data["tenure"],
+        form_data["phone_service"],
+        form_data["multiple_lines"],
+        form_data["internet_service"],
+        form_data["online_security"],
+        form_data["online_backup"],
+        form_data["device_protection"],
+        form_data["tech_support"],
+        form_data["streaming_tv"],
+        form_data["streaming_movies"],
+        form_data["contract"],
+        form_data["paperless_billing"],
+        form_data["payment_method"],
+        form_data["monthly_charges"],
+        form_data["total_charges"],
+    )
+
+
+def _predict_logistic_locally(form_data: dict):
+    formatted = _format_telco_payload(form_data)
+    return predict_logistic_regression(formatted)
+
+
+def _predict_knn_locally(form_data: dict):
+    formatted = _format_telco_payload(form_data)
+    return predict_knn(formatted)
+
+
+def _predict_kmeans_locally(form_data: dict):
+    formatted = prepare_credit_card_input(
+        form_data["BALANCE"],
+        form_data["BALANCE_FREQUENCY"],
+        form_data["PURCHASES"],
+        form_data["ONEOFF_PURCHASES"],
+        form_data["INSTALLMENTS_PURCHASES"],
+        form_data["CASH_ADVANCE"],
+        form_data["PURCHASES_FREQUENCY"],
+        form_data["ONEOFF_PURCHASES_FREQUENCY"],
+        form_data["PURCHASES_INSTALLMENTS_FREQUENCY"],
+        form_data["CASH_ADVANCE_FREQUENCY"],
+        form_data["CASH_ADVANCE_TRX"],
+        form_data["PURCHASES_TRX"],
+        form_data["CREDIT_LIMIT"],
+        form_data["PAYMENTS"],
+        form_data["MINIMUM_PAYMENTS"],
+        form_data["PRC_FULL_PAYMENT"],
+        form_data["TENURE"],
+    )
+    return predict_kmeans(formatted)
 
 
 # ============================================
@@ -689,9 +804,23 @@ st.markdown("""
         color: #1f2937 !important;
     }
     
-    /* Sidebar con gradiente atractivo */
-    .sidebar .sidebar-content {
-        background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+    /* Sidebar con el mismo gradiente que el header principal */
+    aside[aria-label="sidebar"],
+    aside[aria-label="sidebar"] * {
+        background-image: none !important;
+    }
+    
+    aside[aria-label="sidebar"] {
+        background: linear-gradient(120deg, #5f7fe9 0%, #7a48ce 100%) !important;
+    }
+    
+    aside[aria-label="sidebar"] > div,
+    aside[aria-label="sidebar"] > div > div,
+    aside[aria-label="sidebar"] [data-testid="stSidebarContent"],
+    aside[aria-label="sidebar"] [data-testid="stVerticalBlock"],
+    aside[aria-label="sidebar"] [data-testid="stVerticalBlock"] > div,
+    aside[aria-label="sidebar"] [data-testid="block-container"] {
+        background: transparent !important;
     }
     
     /* Header del sidebar - Claro y atractivo - MÁS ESPECÍFICO */
@@ -744,7 +873,14 @@ st.markdown("""
 # SIDEBAR - SELECCIÓN DE MODELO
 # ============================================
 st.sidebar.markdown("""
-<div style="text-align: center; padding: 1rem; background: rgba(255,255,255,0.1); border-radius: 10px; margin-bottom: 2rem;">
+<div style="
+    text-align: center;
+    padding: 1.25rem;
+    border-radius: 18px;
+    margin-bottom: 2rem;
+    background: linear-gradient(120deg, #6c7fe2 0%, #7c4fc3 100%);
+    box-shadow: 0 10px 25px rgba(103, 126, 234, 0.35);
+">
     <h2 style="color: white; margin: 0;">📊 Modelos</h2>
 </div>
 """, unsafe_allow_html=True)
@@ -758,7 +894,12 @@ model_choice = st.sidebar.radio(
 # Información adicional en el sidebar
 st.sidebar.markdown("---")
 st.sidebar.markdown("""
-<div style="padding: 1rem; background: rgba(255,255,255,0.1); border-radius: 10px;">
+<div style="
+    padding: 1.25rem;
+    border-radius: 18px;
+    background: linear-gradient(120deg, #6c7fe2 0%, #7c4fc3 100%);
+    box-shadow: 0 10px 25px rgba(103, 126, 234, 0.35);
+">
     <h4 style="color: white; margin-top: 0;">ℹ️ Información</h4>
     <p style="color: white; font-size: 0.9rem; margin: 0;">
         Esta aplicación permite probar modelos de Machine Learning entrenados previamente.
@@ -768,7 +909,7 @@ st.sidebar.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================
-# MODELOS SUPERVISADOS (TELCO ABANDONO)
+# MODELOS SUPERVISADOS (TELCO CHURN/ABANDONO)
 # ============================================
 if model_choice in ["Regresión Logística", "K-Nearest Neighbors (KNN)"]:
     
@@ -785,12 +926,10 @@ if model_choice in ["Regresión Logística", "K-Nearest Neighbors (KNN)"]:
     st.markdown(f"""
     <div style="background: linear-gradient(135deg, {color} 0%, #764ba2 100%); padding: 2rem; border-radius: 15px; color: white; margin-bottom: 2rem;">
         <h2 style="margin: 0; color: white;">{icon} {model_choice}</h2>
-        <p style="margin: 0.5rem 0 0 0; opacity: 0.9;">Dataset: Abandono de Clientes Telco</p>
+        <p style="margin: 0.5rem 0 0 0; opacity: 0.9;">Dataset: Churn/Abandono de Clientes Telco</p>
         <p style="margin: 0.5rem 0 0 0; font-size: 0.95rem; opacity: 0.8;">{description}</p>
     </div>
     """, unsafe_allow_html=True)
-    
-    st.info("Las predicciones se procesan en un backend remoto desplegado en Railway. Puede tomar unos segundos.")
     
     # Formulario de entrada con mejor diseño
     st.markdown("""
@@ -874,9 +1013,15 @@ if model_choice in ["Regresión Logística", "K-Nearest Neighbors (KNN)"]:
         }
         
         endpoint = "/predict/logistic" if model_choice == "Regresión Logística" else "/predict/knn"
+        fallback_fn = _predict_logistic_locally if model_choice == "Regresión Logística" else _predict_knn_locally
         
         with st.spinner("Enviando datos al backend..."):
-            result = call_backend(endpoint, payload)
+            result = call_backend(
+                endpoint,
+                payload,
+                fallback=lambda: fallback_fn(payload),
+                fallback_label="predicción local",
+            )
         
         if not result:
             st.stop()
@@ -907,7 +1052,7 @@ if model_choice in ["Regresión Logística", "K-Nearest Neighbors (KNN)"]:
                 prob_churn = result['probability_churn'] * 100
                 st.markdown(f"""
                 <div class="metric-card" style="text-align: center;">
-                    <h3 style="margin: 0; color: #667eea; font-size: 1.5rem;">Probabilidad de Abandono</h3>
+                    <h3 style="margin: 0; color: #667eea; font-size: 1.5rem;">Probabilidad de Churn/Abandono</h3>
                     <h2 style="margin: 0.5rem 0; color: #e74c3c;">{prob_churn:.2f}%</h2>
                 </div>
                 """, unsafe_allow_html=True)
@@ -916,7 +1061,7 @@ if model_choice in ["Regresión Logística", "K-Nearest Neighbors (KNN)"]:
                 prob_no_churn = result['probability_no_churn'] * 100
                 st.markdown(f"""
                 <div class="metric-card" style="text-align: center;">
-                    <h3 style="margin: 0; color: #667eea; font-size: 1.5rem;">Probabilidad de No Abandono</h3>
+                    <h3 style="margin: 0; color: #667eea; font-size: 1.5rem;">Probabilidad de No Churn/Abandono</h3>
                     <h2 style="margin: 0.5rem 0; color: #27ae60;">{prob_no_churn:.2f}%</h2>
                 </div>
                 """, unsafe_allow_html=True)
@@ -924,7 +1069,7 @@ if model_choice in ["Regresión Logística", "K-Nearest Neighbors (KNN)"]:
             # Gráfico de barras de probabilidades
             fig = go.Figure()
             fig.add_trace(go.Bar(
-                x=['Abandono', 'Sin Abandono'],
+                x=['Churn/Abandono', 'Sin Churn/Abandono'],
                 y=[prob_churn, prob_no_churn],
                 marker_color=['#e74c3c', '#27ae60'],
                 text=[f'{prob_churn:.2f}%', f'{prob_no_churn:.2f}%'],
@@ -940,7 +1085,7 @@ if model_choice in ["Regresión Logística", "K-Nearest Neighbors (KNN)"]:
             st.plotly_chart(fig, use_container_width=True)
             
             # Barra de progreso visual
-            st.markdown("### Probabilidad de Abandono")
+            st.markdown("### Probabilidad de Churn/Abandono")
             st.progress(result['probability_churn'])
             
             # Interpretación
@@ -949,7 +1094,7 @@ if model_choice in ["Regresión Logística", "K-Nearest Neighbors (KNN)"]:
                 <div class="warning-box">
                     <h4 style="margin: 0;">⚠️ Alerta: Cliente en Riesgo</h4>
                     <p style="margin: 0.5rem 0 0 0;">
-                        El cliente tiene alta probabilidad de abandonar el servicio (Abandono).
+                        El cliente tiene alta probabilidad de abandonar el servicio (Churn/Abandono).
                         Se recomienda tomar acciones preventivas.
                     </p>
                 </div>
@@ -1001,9 +1146,9 @@ if model_choice in ["Regresión Logística", "K-Nearest Neighbors (KNN)"]:
             if result['prediction'] == 1:
                 st.markdown("""
                 <div class="warning-box">
-                    <h4 style="margin: 0;">⚠️ Predicción: Abandono</h4>
+                    <h4 style="margin: 0;">⚠️ Predicción: Churn/Abandono</h4>
                     <p style="margin: 0.5rem 0 0 0;">
-                        Según el algoritmo KNN, este cliente tiene probabilidad de Abandono
+                        Según el algoritmo KNN, este cliente tiene probabilidad de Churn/Abandono
                         basándose en clientes similares del dataset.
                     </p>
                 </div>
@@ -1011,9 +1156,9 @@ if model_choice in ["Regresión Logística", "K-Nearest Neighbors (KNN)"]:
             else:
                 st.markdown("""
                 <div class="success-box">
-                    <h4 style="margin: 0;">✅ Predicción: No Abandono</h4>
+                    <h4 style="margin: 0;">✅ Predicción: No Churn/Abandono</h4>
                     <p style="margin: 0.5rem 0 0 0;">
-                        Según el algoritmo KNN, este cliente NO tiene probabilidad de Abandono.
+                        Según el algoritmo KNN, este cliente NO tiene probabilidad de Churn/Abandono.
                     </p>
                 </div>
                 """, unsafe_allow_html=True)
@@ -1108,7 +1253,12 @@ else:  # K-Means
         }
         
         with st.spinner("Calculando cluster en el backend..."):
-            result = call_backend("/predict/kmeans", payload)
+            result = call_backend(
+                "/predict/kmeans",
+                payload,
+                fallback=lambda: _predict_kmeans_locally(payload),
+                fallback_label="asignación local",
+            )
         
         if not result:
             st.stop()

@@ -97,9 +97,42 @@ set API_BASE_URL=http://localhost:8000   # Windows PowerShell
 export API_BASE_URL=http://localhost:8000  # macOS / Linux
 ```
 
-Si no defines `API_BASE_URL`, el frontend utilizará automáticamente el backend desplegado en Railway.
+Si no defines `API_BASE_URL`, el frontend intentará utilizar el backend desplegado en Railway.  
+En caso de que dicho backend remoto no esté disponible, la aplicación utilizará automáticamente
+los modelos locales como fallback, siempre que los archivos `.pkl` estén en la carpeta `modelos/`.
 
-### 2. Frontend (Streamlit)
+### 2. Restaurar el backend en Railway
+
+1. **Instala el CLI de Railway** (solo la primera vez)
+   ```bash
+   npm i -g @railway/cli
+   railway login
+   ```
+2. **Crea o vincula un proyecto**
+   ```bash
+   railway init                      # crea uno nuevo desde este repo
+   # o, si ya tienes un proyecto existente:
+   railway link <ID_DEL_PROYECTO>
+   ```
+3. **Despliega**
+   ```bash
+   railway up
+   ```
+   El CLI detectará el `Procfile`/`railway.json` añadidos y ejecutará:
+   ```
+   uvicorn backend.api:app --host 0.0.0.0 --port $PORT
+   ```
+   Asegúrate de que la carpeta `modelos/` esté incluida en el despliegue (contiene los `.pkl`).
+
+4. **Obtén la nueva URL** generada por Railway y actualiza el frontend:
+   ```bash
+   set API_BASE_URL=https://<tu-app>.up.railway.app   # Windows PowerShell
+   export API_BASE_URL=https://<tu-app>.up.railway.app # macOS / Linux
+   ```
+   También puedes definir la variable dentro de los “Environment Variables” del proyecto en la consola de Railway para tenerla siempre disponible.
+
+### 3. Frontend (Streamlit)
+### 3. Frontend (Streamlit)
 
 2. **Ejecutar la aplicación**
    
